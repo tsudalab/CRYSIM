@@ -1,0 +1,55 @@
+reg_param:
+  learning_model_order: 2
+  epochs: 800
+  batch_size: 100
+  lr: 0.001
+  lr_s_name: MultiStepLR
+  warmup_steps: 1000
+  weight_decay: 1e-09
+  alpha: 10
+  beta: 1
+  ema_momentum: 1
+  interaction_terms: 0
+  k_fm: 16
+
+slow_reg_param:
+  learning_model_order: 2
+  epochs: 800
+  batch_size: 10
+  lr: 0.001
+  lr_s_name: MultiStepLR
+  warmup_steps: 1000
+  weight_decay: 1e-09
+  alpha: 10
+  beta: 1
+  ema_momentum: 1
+  interaction_terms: 0
+  k_fm: 16
+
+reg_param2:
+  learning_model_order: 2
+  epochs: 800
+  batch_size: 100
+  lr: 0.001
+  lr_s_name: MultiStepLR
+  warmup_steps: 0
+  weight_decay: 1e-09
+  alpha: 10
+  beta: 1
+  ema_momentum: 0.5
+  interaction_terms: 0
+  k_fm: 16
+
+slow_reg_param2:
+  learning_model_order: 2
+  epochs: 1500
+  batch_size: 10
+  lr: 0.0001
+  lr_s_name: SequentialLR
+  warmup_steps: 1000
+  weight_decay: 1e-09
+  alpha: 10
+  beta: 1
+  ema_momentum: 1
+  interaction_terms: 0
+  k_fm: 16
