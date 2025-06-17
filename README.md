@@ -192,6 +192,10 @@ Apply BO to predict Y6Co51 system:
 ```commandline
 python main_batch.py -sys Y6Co51 -sol hy_bo
 ```
+Try CRYSIM-5 on a simple Ca4S4 system with a small initial training set:
+```commandline
+python main_batch.py -sys Ca4S4 -sol amp_c -p 5 -s 0 -init 200
+```
 Apply CRYSIM-10 
 and CRYSIM-12 with "Amplify with constraints" solver to predict 
 Ca24Al16Si24O96 system, each of which performs two times with seed 0 and 1:
