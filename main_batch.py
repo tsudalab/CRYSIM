@@ -17,7 +17,6 @@ if torch.cuda.is_available():
 # sys_name = 'Y6Co51'
 # sys_name = 'Ca24Al16Si24O96'
 # sys_name = 'Si96O192'
-init_pos_num = 1000
 init_sample_rate = 1
 iter_sample_num = 30
 
@@ -28,6 +27,7 @@ parser.add_argument('-sys', '--system', type=str)
 parser.add_argument('-sol', '--solver', type=str)
 parser.add_argument('-reg', '--regressor', type=str, default=RegressionName.fm()[0])
 parser.add_argument('-eval', '--evaluator', type=str, default=EnergyEvaluatorName.m3gnet())
+parser.add_argument('-init', '--init-points', type=int, default=1000)
 parser.add_argument('-s', '--seeds', type=int, action='append')
 parser.add_argument('-p', '--precs', type=int, action='append')
 parser.add_argument('-n', '--n-steps', type=int, default=300)
@@ -48,6 +48,8 @@ precs = [None] if precs is None else precs
 
 n_steps = args.n_steps
 # n_steps = 300
+
+init_pos_num = args.init_points
 
 timeout = args.timeout
 # timeout = None
