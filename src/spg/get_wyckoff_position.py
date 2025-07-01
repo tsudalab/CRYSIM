@@ -115,7 +115,7 @@ class GetWyckoffPosition:
         if is_random:
             self.wyckoffs = self.combination_wp_random(wyckoff_position, atom_num, is_shuffle=True)
         else:
-            # self.wyckoffs = self.combination_wp_all(wyckoff_position, atom_num)
+            # self.wyckoffs = self.combination_wp_all(wyckoff_position, atom_num, shuffle=True)
             # if len(self.wyckoffs) != 0 and self.wyckoffs[0] is None:
             #     self.wyckoffs = self.combination_wp_all(wyckoff_position, atom_num, shuffle=False)
             self.wyckoffs = self.combination_wp_all(wyckoff_position, atom_num, shuffle=False)
@@ -130,6 +130,17 @@ class GetWyckoffPosition:
                            # shuffle: bool = True,
                            shuffle: bool = False
                            ):
+        """
+        By default, without shuffling, WPs of elements are sorted to make WPCs including more general WPs be in the
+            front of the list before combining into WPCs of the system.
+
+        is_fast == False: Try and collect all successful WPCs;
+        is_fast == True & shuffle == False: Try and collect successful WPCs, until max_count or max_trial
+            reaches; tricks are added in case of there are too many possible WPCs to include more WPCs based on
+            special WPs;
+        is_fast == True & shuffle == True: After shuffling, try and collect successful WPCs, until max_count or
+            max_trial reaches.
+        """
         wp_part_list = []
         for an in atom_num:
             part_wp_an_path = os.path.join(self.save_path, 'part_wp', str(an) + '_' + str(self.sg))
@@ -141,61 +152,96 @@ class GetWyckoffPosition:
             if not wp_part:
                 return []
 
-            # make the wp_parts that do not contain static positions to be in the front of the list
+            # make the wp_parts that do not contain static positions be in the front of the list
             wp_part = sorted(wp_part, key=custom_sort_key)
 
             wp_part_list.append(wp_part)
 
         is_use_fast = False
+        is_use_reverse = False
+        wp_part_len_list = [len(wpp) for wpp in wp_part_list]
+        wp_all_count = functools.reduce(lambda x, y: x * y, wp_part_len_list)
+        # print(wp_all_count)
         if is_fast:
-            wp_part_len_list = [len(wpp) for wpp in wp_part_list]
-            wp_all_count = functools.reduce(lambda x, y: x * y, wp_part_len_list)
             if wp_all_count > max_count:
+                is_use_fast = True
                 if shuffle:
                     wp_part_list_tmp = []
                     for wpp in wp_part_list:
-                        random.shuffle(wpp)
-                        # wpp = weighted_shuffle(wpp, weights=list(range(1, len(wpp) + 1))[::-1])
+                        # random.shuffle(wpp)
+                        wpp = weighted_shuffle(wpp, weights=[i**10 for i in list(range(1, len(wpp) + 1))[::-1]])
+                        # let more general WPs have higher possibility to be in the front in shuffling
                         wp_part_list_tmp.append(wpp)
                     wp_part_list = wp_part_list_tmp
+
+            if (not shuffle) and (wp_all_count > 100 * max_count):
                 is_use_fast = True
-            # print(wp_all_count)
+                is_use_reverse = True
+                wp_part_reverse_list = []
+                for i, wpp in enumerate(wp_part_list):
+                    if i == 0:
+                        wpp = wpp[::-1]
+                    wp_part_reverse_list.append(wpp)
 
-        wp_all_list = []
-        wp_product = itertools.product(*wp_part_list)
-        num_trial = 0
-        for p in wp_product:
-            num_trial += 1
-            pp = [set(k for j in i for k in j) for i in p]
+        def _combine_wp(_wp_part_list, _is_use_fast, _max_count, _max_trial):
+            wp_all_list = []
+            wp_product = itertools.product(*_wp_part_list)
+            num_trial = 0
+            for p in wp_product:
+                num_trial += 1
+                pp = [set(k for j in i for k in j) for i in p]
 
-            # res = list(pp[0].intersection(*pp[1:]))
-            # original implementation, getting intersection of wp combinations for all elements
-            # however, what we need is the union of all pair-wise intersections
-            pp_pairs = itertools.combinations(pp, 2)
-            intersections = [set(a).intersection(b) for a, b in pp_pairs]
-            res = set().union(*intersections)
+                # res = list(pp[0].intersection(*pp[1:]))
+                # original implementation, getting intersection of wp combinations for all elements
+                # however, what we need is the union of all pair-wise intersections
+                pp_pairs = itertools.combinations(pp, 2)
+                intersections = [set(a).intersection(b) for a, b in pp_pairs]
+                res = set().union(*intersections)
 
-            for ri in res:
-                if not ('x' in ri or 'y' in ri or 'z' in ri):
-                    p = []
-                    break
-            if p:
-                wp_all_list.append(p)
-                num_trial = 0
-                if is_use_fast and len(wp_all_list) >= max_count:
+                for ri in res:
+                    if not ('x' in ri or 'y' in ri or 'z' in ri):  # static coordinates conflict
+                        p = []
+                        break
+                if p:
+                    wp_all_list.append(p)
+                    num_trial = 0
+                    if _is_use_fast and len(wp_all_list) >= _max_count:
+                        logger.info(f'Finish with {len(wp_all_list)} valid WPCs since max_count is reached')
+                        return wp_all_list
+
+                if (len(wp_all_list) % int(max_count / 10) == 0) and (len(wp_all_list) != 0):
+                    logger.info(f'Collect {len(wp_all_list)} valid WPCs')
+
+                if (num_trial % 1e6 == 0) and (num_trial != 0):
+                    logger.info(f'{num_trial} trials without any valid WPC, current valid WPCs {len(wp_all_list)}')
+
+                if (num_trial >= _max_trial) & (_max_trial > 0):
+                    # if len(wp_all_list) > int(max_count * 0.01):
+                    #     return wp_all_list
+                    # else:
+                    #     return [None]  # if generated number with shuffling is small, try restarting from general WPs
+                    logger.info(f'Finish with {len(wp_all_list)} valid WPCs since max_trial is reached')
                     return wp_all_list
 
-            if (num_trial % 1000000 == 0) and (num_trial != 0):
-                logger.info(f'Finish {num_trial} trials, current number of valid wp {len(wp_all_list)}')
+            logger.info(f'Finish with {len(wp_all_list)} valid WPCs, the complete list of WPCs for the SG')
+            return wp_all_list
 
-            if (num_trial >= max_trial) & (max_trial > 0):
-                # if len(wp_all_list) > int(max_count * 0.01):
-                #     return wp_all_list
-                # else:
-                #     return [None]  # if generated number with shuffling is small, try restarting from general WPs
-                return wp_all_list
+        if is_use_fast:
+            logger.info("Combine and try until max_count or max_trial is reached")
+        else:
+            logger.info("Combine and try all WPCs")
+        if not is_use_reverse:
+            wp_all_list_output = _combine_wp(_wp_part_list=wp_part_list, _is_use_fast=is_use_fast,
+                                             _max_count=max_count, _max_trial=max_trial)
+        else:
+            wp_all_list_output = []
+            wp_all_list_output += _combine_wp(_wp_part_list=wp_part_list, _is_use_fast=is_use_fast,
+                                              _max_count=int(max_count / 2), _max_trial=max_trial)
+            logger.info(f'Finish general part, start special part')
+            wp_all_list_output += _combine_wp(_wp_part_list=wp_part_reverse_list, _is_use_fast=is_use_fast,
+                                              _max_count=int(max_count / 2), _max_trial=max_trial)
 
-        return wp_all_list
+        return wp_all_list_output
 
     def combination_wp_random(self,
                               wyckoff_position: list,
