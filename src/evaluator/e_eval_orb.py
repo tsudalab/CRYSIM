@@ -6,8 +6,11 @@ from pymatgen.io.ase import AseAtomsAdaptor
 from src.registry import EnergyEvaluatorName
 from src.evaluator.e_eval import EnergyEvaluator, _fmax, _steps
 
-from orb_models.forcefield import pretrained
-from orb_models.forcefield.calculator import ORBCalculator
+try:
+    from orb_models.forcefield import pretrained
+    from orb_models.forcefield.calculator import ORBCalculator
+except ModuleNotFoundError:
+    pass
 
 
 class EnergyOrb(EnergyEvaluator):

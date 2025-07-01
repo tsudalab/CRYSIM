@@ -1,8 +1,11 @@
-import hyperopt as hy
 import numpy as np
+try:
+    import hyperopt as hy
+except ModuleNotFoundError:
+    pass
 
 from src.registry import SolverName, RegressionName
-from src.solver.sol_qubo import SolverComponent
+from src.solver.qubo_base import SolverComponent
 from src.regressor.poly_sim import collect_poly_terms
 
 

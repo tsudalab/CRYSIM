@@ -7,7 +7,7 @@ import torch
 from src.optimizer.rand_gen import random_generate, LatticeLengthController, \
     default_ang_lb, default_ang_ub
 from src.log_analysis import Logger, Logger4CSP, load_training_set, print_or_record
-from src.registry import Component, OptimizerName, SolverName
+from src.registry import Component, OptimizerName, SolverName, EnergyEvaluatorName
 from src.struct_utils import StructReader, get_curr_struct_num, get_species_list, \
     array_to_pmg_for_training_and_recording, pymatgen_struct_to_array, \
     atoms_overlapping, DistFilter, SPG, unique_elements, min_pair_dist_mat
@@ -60,6 +60,10 @@ class CSP(Component):
                              seed=self.seed, follow_dir=follow_dir)
         self.logger.record_dataset_settings(self.init_pos_num, self.iter_sample_num, self.fail_num)
         self.logger4csp = Logger4CSP(logger_obj=self.logger)
+
+        # save dir for VASP outputs
+        if self.e_cal.name == EnergyEvaluatorName.vasp():
+            self.e_cal.set_logger(self.logger)
 
         self._read_input_structure2()
         return
@@ -142,9 +146,16 @@ class CSP(Component):
         self.used_atoms, self.spg_gen, self.wp_gen = [], [], []
         for i, struct in enumerate(init_gen_struct_list):
             self.e_cal.build_atoms(struct)
-            energy = self.e_cal.cal_energy()
-            print(f'Energy of {i}-th generated structure: {energy}, '
-                  f'current threshold: {self.e_sampling_threshold}')
+            if self.e_cal.name == EnergyEvaluatorName.vasp():
+                self.e_cal.set_output(label=f'est-{i}')
+            try:
+                energy = self.e_cal.cal_energy()
+                print_or_record(self.logger, f'Energy of {i}-th generated structure: {energy}, '
+                                f'current threshold: {self.e_sampling_threshold}')
+            except Exception:
+                print_or_record(self.logger, f'Energy estimation on {i}-th structure failed. '
+                                f'Go to the next one.')
+                continue
 
             if energy <= self.e_sampling_threshold:
                 struct = array_to_pmg_for_training_and_recording(struct)
@@ -156,10 +167,10 @@ class CSP(Component):
 
             self._update_sampling_threshold()
 
-        with open(training_set_file, 'wb') as f:
-            data = {'struct_list': self.struct_list, 'struct_e_list': self.struct_e_list,
-                    'used_atoms': self.used_atoms, 'spg_gen': self.spg_gen, 'wp_gen': self.wp_gen}
-            pickle.dump(data, f)
+            with open(training_set_file, 'wb') as f:
+                data = {'struct_list': self.struct_list, 'struct_e_list': self.struct_e_list,
+                        'used_atoms': self.used_atoms, 'spg_gen': self.spg_gen, 'wp_gen': self.wp_gen}
+                pickle.dump(data, f)
         print(f'Training set size: {len(self.struct_list)}')
         return
 
@@ -178,7 +189,7 @@ class CSP(Component):
     def model_relaxed_encode(self, r_pmg_struct, new_x):
         raise NotImplementedError
 
-    def relax_and_evaluate_energy(self, struct, sample_num):
+    def relax_and_evaluate_energy(self, struct, sample_num, i):
         # if atoms_overlapping(struct.pos):
         #     print('Current setting leads to atoms overlap')
         #     self.logger.record_anything9(operation='Initial structure atoms overlap', result='fail')
@@ -188,6 +199,8 @@ class CSP(Component):
             torch.cuda.synchronize()
         start_time = time.perf_counter()
         self.e_cal.build_atoms(struct)
+        if self.e_cal.name == EnergyEvaluatorName.vasp():
+            self.e_cal.set_output(label=f'rlx-{i}')
         if sample_num == 1:
             relaxed_struct, energy = self.e_cal.cal_relax()
             relaxed_struct, energy = [relaxed_struct], [energy]
@@ -233,11 +246,11 @@ def find_struct_wrt_pair_dist(pmg_struct, csp):
         return pmg_struct[best_idx]
 
 
-def energy_evaluation_and_get_samples(pmg_struct, csp):
+def energy_evaluation_and_get_samples(pmg_struct, csp, idx=None):
     struct = pymatgen_struct_to_array(pmg_struct)
     try:
         r_struct, energy = csp.relax_and_evaluate_energy(
-            struct, sample_num=csp.iter_sample_num)
+            struct, sample_num=csp.iter_sample_num, i=idx)
         if (energy is None) or (None in energy) or (r_struct is None) or (None in r_struct):
             csp.logger.record_new_struct_fail()
             r_struct, energy = [pmg_struct] * csp.fail_num, [csp.e_sampling_threshold] * csp.fail_num
@@ -360,7 +373,8 @@ class OptBase:
             self.csp.logger4csp.save_init_struct(pmg_struct, idx=self.csp.logger.new_struct_suc, idx_off=0)
 
             # 4. try to relax the initial structure & save it
-            r_struct, energy = energy_evaluation_and_get_samples(pmg_struct, csp=self.csp)
+            r_struct, energy = energy_evaluation_and_get_samples(pmg_struct, csp=self.csp,
+                                                                 idx=self.csp.logger.new_struct_gen_call)
 
             # 4.1 assign high energies to structures whose atoms are too close but energies < 0, as a remedy of MLP
             if self.csp.filter_struct:
@@ -499,7 +513,7 @@ class RandomGenerate4MS(CSP):
         print("Start running")
         for i in range(self.init_struct_num, self.num_steps):
             self.logger4csp.save_init_struct(self.logger4csp.pmg_struct_list[i], idx=i, idx_off=0)
-            r_struct, energy = energy_evaluation_and_get_samples(self.logger4csp.pmg_struct_list[i], csp=self)
+            r_struct, energy = energy_evaluation_and_get_samples(self.logger4csp.pmg_struct_list[i], csp=self, idx=i)
             self.success_step(i, r_struct, energy, None)
         return
 

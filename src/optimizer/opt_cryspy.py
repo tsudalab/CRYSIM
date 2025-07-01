@@ -11,7 +11,7 @@ class ExtEstimator(Component):
         self._load_output_name()
         self.logger = Logger(model_name=self.output_name, system_name=system_name, seed=seed,
                              require_time=log_time, n_steps=n_steps)
-        self.logger.record_dataset_settings(init_training_size=n_steps, iter_sample_num=0)
+        self.logger.record_dataset_settings(init_training_size=n_steps, iter_sample_num=0, fail_num=None)
         self.logger4csp = Logger4CSP(self.logger)
 
     def _load_output_name(self):

@@ -1,8 +1,11 @@
 import ase
+try:
+    import chgnet.model as chg
+except ModuleNotFoundError:
+    pass
 
 from src.registry import EnergyEvaluatorName
 from src.evaluator.e_eval import EnergyEvaluator, _fmax, _steps
-import chgnet.model as chg
 
 
 class EnergyCHGNet(EnergyEvaluator):

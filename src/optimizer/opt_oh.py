@@ -5,7 +5,7 @@ from src.registry import OptimizerName, RegressionName
 from src.log_analysis import load_training_set
 from src.onehot.oh import OneHotDirector, OneHotConstraintsType, OneHotImplementationType
 from src.struct_utils import SPG, get_best_crys_sys2, get_best_spg2
-from src.regressor.poly_sim import fm_objective_function
+from src.solver.sol_q_amplify import fm_objective_function
 
 
 class Onehot4CSP(CSP):

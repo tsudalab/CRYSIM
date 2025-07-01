@@ -124,7 +124,8 @@ class Logger:
         return
 
     @staticmethod
-    def record_pes_metric(rmse, pcc):
+    def record_pes_metric(mae, rmse, pcc):
+        logger.info(f'MAE of trained PES: {mae}')
         logger.info(f'RMSE of trained PES: {rmse}')
         logger.info(f'PCC of trained PES: {pcc}')
         return
@@ -456,12 +457,13 @@ class Analyzer:
 
 class OutputAnalysis:
     def __init__(self, log_dir,
-                 log_file=None, pos_init_file=None, pos_relaxed_file=None, e_list_file=None):
+                 log_file=None, pos_init_file=None, pos_relaxed_file=None, e_list_file=None, training_set_file=None):
         self.log_dir = log_dir
         self.log_file = 'log' if log_file is None else log_file
         self.pos_init_file = 'POS_init' if pos_init_file is None else pos_init_file
         self.pos_relaxed_file = 'POS_relaxed' if pos_relaxed_file is None else pos_relaxed_file
         self.results_list_file = 'accumulated-results.pkl' if e_list_file is None else e_list_file
+        self.training_set_file = 'training_set.pkl' if training_set_file is None else training_set_file
         return
 
     def _read_files(self, file_name, binary, label=None):
@@ -519,11 +521,14 @@ class OutputAnalysis:
         self.pos_init_list = self._read_pos_file(self.pos_init, id_list=self.pos_init_id_list)
         return
 
-    def load_e_list(self, filter_struct=False):
+    def load_e_list(self, filter_struct=False, norm=False):
         self.e_list = self._read_files(file_name=self.results_list_file, binary=True, label='energy')
         self.e_list = np.array(self.e_list)
         self.e_list = [e for e in self.e_list if e is not None]
         self.e_list = np.array(self.e_list)
+        if norm:
+            num_atom = len(self._read_files(file_name=self.results_list_file, binary=True, label='init_struct')[0])
+            self.e_list = self.e_list / num_atom
         if filter_struct:
             filter_num = self._filter_unreasonable_struct_for_energy()
             return filter_num
@@ -532,6 +537,15 @@ class OutputAnalysis:
 
     def load_result(self):
         self.results_list = self._read_files(file_name=self.results_list_file, binary=True)
+        return
+
+    def load_training_set(self):
+        if isinstance(self.log_dir, list):
+            log_d = self.log_dir[-1]
+        else:
+            log_d = self.log_dir
+        with open(f'{log_d}/{self.training_set_file}', 'rb') as f:
+            self.training_set = pickle.load(f)
         return
 
     def load(self, filter_struct=False):
@@ -698,6 +712,18 @@ class OutputAnalysis:
         print("Finish obtaining")
         return
 
+    def split_training_set(self):
+        self.load_log()
+        self.load_training_set()
+        sample_counts = []
+        regex = r"For learning, currently we have\s+(\d+)\s+samples"
+        for line in self.log_list:
+            match = re.search(regex, line)
+            if match:
+                number_str = match.group(1)
+                sample_counts.append(int(number_str))
+        return self.training_set, sample_counts
+
     def collect_lattice(self):
         lat_list = []
         for pos in self.pos_relaxed_list:
@@ -718,15 +744,15 @@ class OutputAnalysis:
         _, _, _, e_list, _, _, _, _ = Analyzer(e_round=e_round).analyze(self.e_list)
         return e_list
 
-    def compare_structure_with_ground_truth(self, poscar_true_dir, output_name, return_lowest=False):
-        e_deci = 2
+    def compare_structure_with_ground_truth(self, poscar_true_dir, output_name, e_round=2, return_lowest=False):
         e_list = deepcopy(self.e_list)
-        e_list = np.round(e_list, e_deci)
+        e_list = np.round(e_list, e_round)
         struct_ids_temp = np.argsort(e_list, kind='stable')
         e_ref = e_list[struct_ids_temp[0]]
         struct_ids = []
         for i in struct_ids_temp:
-            if np.abs(e_ref - e_list[i]) < 0.02:
+            # if np.abs(e_ref - e_list[i]) <= 0.001:
+            if np.abs(e_ref - e_list[i]) == 0:
                 struct_ids.append(i)
             else:
                 print(f'Gathered {len(struct_ids)} structures')
@@ -756,21 +782,21 @@ class OutputAnalysis:
             if len(candidate_list) == 0:
                 print(f'Fail for {output_name}')
                 return num_e_tol, [struct_ids[0]], [999], \
-                    [pos_relaxed_list[struct_ids[0]]], [np.round(e_list[struct_ids[0]], e_deci)]
+                    [pos_relaxed_list[struct_ids[0]]], [np.round(e_list[struct_ids[0]], e_round)]
             else:
                 print(f'Succeed for {output_name}')
                 return num_e_tol, candidate_list, dist_list, \
-                    [pos_relaxed_list[j] for j in candidate_list], [np.round(e_list[j], e_deci) for j in candidate_list]
+                    [pos_relaxed_list[j] for j in candidate_list], [np.round(e_list[j], e_round) for j in candidate_list]
         else:
             if len(candidate_list) == 0:
                 print(f'Fail for {output_name}')
                 return num_e_tol, [struct_ids[0]], [999], \
-                    [pos_relaxed_list[struct_ids[0]]], [np.round(e_list[struct_ids[0]], e_deci)], \
+                    [pos_relaxed_list[struct_ids[0]]], [np.round(e_list[struct_ids[0]], e_round)], \
                     e_low_id, e_low
             else:
                 print(f'Succeed for {output_name}')
                 return num_e_tol, candidate_list, dist_list, \
-                    [pos_relaxed_list[j] for j in candidate_list], [np.round(e_list[j], e_deci) for j in candidate_list], \
+                    [pos_relaxed_list[j] for j in candidate_list], [np.round(e_list[j], e_round) for j in candidate_list], \
                     e_low_id, e_low
 
 

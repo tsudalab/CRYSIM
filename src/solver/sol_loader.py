@@ -1,7 +1,7 @@
 import time
 from src.registry import SolverName
 from src.solver.sol_cl import HyperOneHotSolver, HyperContinuousSolver, HyperSetSolver
-from src.solver.sol_qubo import AmplifySolverProxy, AmplifyForLeapSolverProxy, AmplifyForDWaveSolverProxy
+from src.solver.sol_q_amplify import AmplifySolverProxy, AmplifyForLeapSolverProxy, AmplifyForDWaveSolverProxy
 
 
 def load_solver_or_proxy(sol_name, opt_name, timeout=None, use_constraints=None):

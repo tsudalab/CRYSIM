@@ -151,3 +151,7 @@ class EnergyEvaluatorName:
     @classmethod
     def orb(cls):
         return 'OrbFF'
+
+    @classmethod
+    def vasp(cls):
+        return 'VASP'

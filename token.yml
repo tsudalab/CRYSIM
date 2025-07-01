@@ -1,2 +1,6 @@
 fae_token: "-"
 dw_token: "-"
+vasp_dire: "-"
+vasp_pp_dire: "-"
+vasp_npar : "-"
+vasp_mpirun_np: "-"

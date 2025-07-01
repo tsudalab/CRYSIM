@@ -62,7 +62,8 @@ class SimpleOpt4MS(Continuous4MS):
         pmg_struct = self.vec2struct(lat_para=lat_para, pos=atoms, spg=spg, wp=wp)
         self.csp.logger4csp.save_init_struct(pmg_struct, idx=self.csp.logger.new_struct_suc, idx_off=0)
 
-        r_struct, energy = energy_evaluation_and_get_samples(pmg_struct, csp=self.csp)
+        r_struct, energy = energy_evaluation_and_get_samples(pmg_struct, csp=self.csp,
+                                                             idx=self.csp.logger.new_struct_gen_call)
         if self.csp.filter_struct:
             r_struct, energy = filter_struct_wrt_pair_dist(csp=self.csp, pmg_struct_list=r_struct, energy_list=energy)
 

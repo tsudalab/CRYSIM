@@ -7,6 +7,7 @@ from src.optimizer.opt_cl import SimpleOpt4MS, CrystalParamFitOpt4MS
 from src.optimizer.opt_oh import BQM4Onehot, Classical4Onehot
 import time
 import yaml
+from pathlib import Path
 
 
 class ModelWrapper:
@@ -14,6 +15,7 @@ class ModelWrapper:
                  precs=10, timeout=None, dist_min=None, wp_sample_num=None, fail_num=1,
                  init_sample_rate=None, iter_sample_num=None, init_pos_num=None,
                  learning_model_type=None,  sol_name=None,
+                 incar_file_dir=None,
                  filter_gen_struct=False, struct_file_path=None,
                  control_lat_shape=None, control_crys_sys=None, control_spg=None,
                  use_constraints=None):
@@ -24,7 +26,8 @@ class ModelWrapper:
         start_time = time.process_time()
         # self.struct_file_path = f'./{system_name}_POS_seed{seed}' \
         #     if struct_file_path is None else struct_file_path
-        self.struct_file_path = f'dataset/{self.system_name}_training{self.seed}.pkl' \
+        Path('dataset').mkdir(parents=False, exist_ok=True)
+        self.struct_file_path = f'dataset/{self.system_name}_{e_cal_name}_num{init_pos_num}-s{self.seed}.pkl' \
             if struct_file_path is None else struct_file_path
         load_struct_file_time = time.process_time()
         print(f"load struct file time: {load_struct_file_time - start_time}")
@@ -82,7 +85,7 @@ class ModelWrapper:
                                   reg_arg=self.main_reg_params) \
             if self.learning_model_type is not None else None
 
-        self.e_cal = load_energy_evaluator(self.e_cal_name)
+        self.e_cal = load_energy_evaluator(self.e_cal_name, incar_file_dir=incar_file_dir)
 
         if sol_name is not None:
             self.sol = load_solver_or_proxy(self.sol_name, self.opt_name,

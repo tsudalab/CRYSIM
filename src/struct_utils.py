@@ -28,6 +28,12 @@ def unique_elements(species_list):
     return elements, num_species_atom
 
 
+def get_system_size(sys_name):
+    system_size = re.findall(r'\d+', sys_name)
+    system_size = sum([eval(i) for i in system_size])
+    return system_size
+
+
 class Struct:
     def __init__(self, lattice, pos, species, cart, pbc=None):
         if pbc is None:

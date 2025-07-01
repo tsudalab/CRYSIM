@@ -3,7 +3,6 @@ import random
 from sklearn.linear_model import Lasso, LinearRegression
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 from itertools import combinations
-from amplify import VariableGenerator, sum_poly
 
 from src.regressor.lin_reg_nn import LinearRegressionNN, TorchFM, LinearRegressionTrainer, \
     get_interaction_terms, get_high_order_terms, pearson_correlation_coefficient, use_interaction_terms
@@ -68,35 +67,6 @@ def assemble_fm_weight(fm_weight_list):
     return np.concatenate([lin_w, inter_w])
 
 
-def build_fm_based_on_amplify(fm_weight_list, amp_var):
-    w_lin, w_inter = fm_weight_list
-    lin_terms = sum_poly(w_lin.shape[0], lambda ii: w_lin[ii] * amp_var[ii])
-    inter_terms = sum_poly(
-        w_inter.shape[1],
-        lambda k: (
-                (sum_poly(w_inter.shape[0], lambda ii: w_inter[ii][k] * amp_var[ii])) ** 2
-                - sum_poly(w_inter.shape[0], lambda ii: w_inter[ii][k] ** 2 * amp_var[ii] ** 2)
-        )
-    ) / 2
-    return lin_terms, inter_terms
-
-
-def fm_objective_function(fm_weight_list, as_dict):
-    w_lin, w_inter = fm_weight_list
-    var = VariableGenerator()
-    var = var.array("Binary", w_lin.shape[0])
-    lin_terms, inter_terms = build_fm_based_on_amplify(fm_weight_list, var)
-    if as_dict:
-        return (lin_terms + inter_terms).as_dict()
-    else:
-        def sort_values_based_on_keys(_dict):
-            _sorted_keys = sorted(_dict.keys())
-            return [_dict[k] for k in _sorted_keys]
-        w = np.hstack([np.array(sort_values_based_on_keys(lin_terms.as_dict())),
-                       np.array(sort_values_based_on_keys(inter_terms.as_dict()))])
-        return w
-
-
 class QuadraticSimulation:
     """
     Simple regression + Metropolis Hastings modification
@@ -130,6 +100,7 @@ class QuadraticSimulation:
         self.X = X
         self.y = y
         self.t_x, self.t_y = None, None
+        self.t_y_bias, self.t_y_divided = 0.0, 1.0
         self.y_pred, self.y_real = None, None
 
         self.model = model
@@ -216,17 +187,18 @@ class QuadraticSimulation:
         if (hasattr(self, 't_y')) and (self.t_y is not None):
             return self.t_y
 
-        if self.scaling_method == "MinMaxNormalization":
-            self.t_y = (self.y - np.min(self.y)) \
-                        / (np.max(self.y) - np.min(self.y))
-        elif self.scaling_method == "Standardization":
-            self.t_y = (self.y - np.mean(self.y)) \
-                        / np.std(self.y)
-        elif self.scaling_method is None:
-            self.t_y = self.y
-        else:
-            raise Exception("Unexpected scaling_method")
+        if self.scaling_method is not None:
+            if self.scaling_method == "MinMaxNormalization":
+                self.t_y_bias, self.t_y_divided = np.min(self.y), np.max(self.y) - np.min(self.y)
+            elif self.scaling_method == "Standardization":
+                self.t_y_bias, self.t_y_divided = np.mean(self.y), np.std(self.y)
+            else:
+                raise Exception("Unexpected scaling_method")
+        self.t_y = (self.y - self.t_y_bias) / self.t_y_divided
         return self.t_y
+
+    def transform_y_back(self, y):
+        return y * self.t_y_divided + self.t_y_bias
 
     def learn_weights(self):
         if self.regression_method == "MaximumPosterior":
@@ -325,11 +297,12 @@ class QuadraticSimulation:
         w = trainer.get_weight()
 
         self.y_pred, self.y_real = trainer.get_pred_and_real()
-        rmse, pcc = trainer.calculate_metrics(y_pred=self.y_pred, y=self.y_real)
+        self.y_pred, self.y_real = self.transform_y_back(self.y_pred), self.transform_y_back(self.y_real)
+        mae, rmse, pcc = trainer.calculate_metrics(y_pred=self.y_pred, y=self.y_real)
         if self.logger is not None:
-            self.logger.record_pes_metric(rmse=rmse, pcc=pcc)
+            self.logger.record_pes_metric(mae=mae, rmse=rmse, pcc=pcc)
         else:
-            print(f"For the whole dataset, rmse: {rmse}, pcc: {pcc}")
+            print(f"For the whole dataset, mae: {mae}, rmse: {rmse}, pcc: {pcc}")
 
         # if self.model == RegressionName.fm()[0]:
         #     import time

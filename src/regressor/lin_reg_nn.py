@@ -290,11 +290,16 @@ class LinearRegressionTrainer:
         return np.sqrt(np.mean((y_pred - y) ** 2)).round(5)
 
     @staticmethod
+    def calculate_mean_absolute_error(y_pred, y):
+        return np.mean(np.abs(y_pred - y)).round(5)
+
+    @staticmethod
     def calculate_correlation_coefficient(y_pred, y):
         return pearson_correlation_coefficient(y_pred, y).round(5)
 
     def calculate_metrics(self, y_pred, y):
-        return self.calculate_root_mean_squared_error(y_pred, y), \
+        return self. calculate_mean_absolute_error(y_pred, y), \
+               self.calculate_root_mean_squared_error(y_pred, y), \
                self.calculate_correlation_coefficient(y_pred, y)
 
 
