@@ -496,14 +496,17 @@ class DistFilter:
         ids_2 = np.repeat(ids, self.num_species, axis=0).flatten()
         self.filter = []
         block_list = []
-        for i in range(self.num_species ** 2):
-            block = np.ones((self.atom_num_list[ids_1[i]], self.atom_num_list[ids_2[i]]))
-            block *= self.min_dist_list[ids_1[i]][ids_2[i]]
-            block_list.append(block)
-            if (i != 0) & ((i + 1) % self.num_species == 0):
-                self.filter.append(np.concatenate(block_list, axis=1))
-                block_list = []
-        self.filter = np.concatenate(self.filter, axis=0)
+        if self.num_species == 1:
+            self.filter = np.ones((self.atom_num_list[0], self.atom_num_list[0])) * self.min_dist_list[0][0]
+        else:
+            for i in range(self.num_species ** 2):
+                block = np.ones((self.atom_num_list[ids_1[i]], self.atom_num_list[ids_2[i]]))
+                block *= self.min_dist_list[ids_1[i]][ids_2[i]]
+                block_list.append(block)
+                if (i != 0) & ((i + 1) % self.num_species == 0):
+                    self.filter.append(np.concatenate(block_list, axis=1))
+                    block_list = []
+            self.filter = np.concatenate(self.filter, axis=0)
         return
 
     def _load_atom_num(self):
