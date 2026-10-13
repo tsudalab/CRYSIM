@@ -1,8 +1,11 @@
 import sys
 sys.path.append('./src')
 import argparse
-from src.wrapper import ModelWrapper
-from src.registry import EnergyEvaluatorName, SolverName, OptimizerName, RegressionName
+from crysim.src.wrapper import ModelWrapper
+from crysim.src.registry import OptimizerName, rlx_type, qubo_list, coords_emb, sym_emb, enc_obj
+from crysim.src import INCAR_ROOT
+from crysim.src.spg.spg_utils import regular_sg_list
+from crysim.src.evaluator.e_eval import _steps
 
 import os
 import torch
@@ -12,157 +15,156 @@ if torch.cuda.is_available():
     os.environ["CUDA_VISIBLE_DEVICES"] = f'{gpu_no}'
     torch.set_default_device(device)
 
-# sys_name = 'Na8Cl8'
-# sys_name = 'Y12Co102'
-# sys_name = 'Y6Co51'
-# sys_name = 'Ca24Al16Si24O96'
-# sys_name = 'Si96O192'
-init_sample_rate = 1
-iter_sample_num = 30
-
 "------------parameters------------"
 
 parser = argparse.ArgumentParser(description='test')
 parser.add_argument('-sys', '--system', type=str)
+parser.add_argument('-d', '--dim', type=int, default=3)
+parser.add_argument('-cmode', '--coords-type', type=int, default=0)
+parser.add_argument('-smode', '--sym-type', type=int, default=0)
+parser.add_argument('-encmode', '--enc-obj', type=int, default=0)
+parser.add_argument('-s', '--seed', type=int)
+parser.add_argument('-p', '--prec', nargs='+', type=int, action='append')
+# Usage: python script.py --list item1 item2 --list item3
+# Result: [['item1', 'item2'], ['item3']]
+parser.add_argument('-pl', '--latlen-prec', nargs='+', type=int, default=0)
+parser.add_argument('-pa', '--latang-prec', nargs='+', type=int, default=0)
+# Usage: python script.py --list item1 item2
+# Result: ['item1', 'item2']
+parser.add_argument('-pw', '--wpc-prec', type=int, default=0)
+
+parser.add_argument('-eval', '--evaluator', type=str)
 parser.add_argument('-sol', '--solver', type=str)
-parser.add_argument('-reg', '--regressor', type=str, default=RegressionName.fm()[0])
-parser.add_argument('-eval', '--evaluator', type=str, default=EnergyEvaluatorName.m3gnet())
-parser.add_argument('-init', '--init-points', type=int, default=1000)
-parser.add_argument('-s', '--seeds', type=int, action='append')
-parser.add_argument('-p', '--precs', type=int, action='append')
+parser.add_argument('-reg', '--regressor', type=str)
+parser.add_argument('-f', '--mt-lambda', type=float, default=0)
+# parser.add_argument('-c', '--constr', action='store_true')
+# parser.add_argument('-b', '--bit', action='store_true')
+
+parser.add_argument('-init', '--init-points', type=int, default=None)
+parser.add_argument('-data', '--init-dataset', type=str, default=OptimizerName.wpc_l_rs()[0] + '-' + rlx_type[0])
+parser.add_argument('-a', '--add-points', type=int, default=100)
 parser.add_argument('-n', '--n-steps', type=int, default=300)
+
+parser.add_argument('-fd', '--is-filter-init-data', action='store_true')
+parser.add_argument('-s2d', '--is-2d-scale', action='store_true')
+parser.add_argument('-r', '--is-pre-relax', action='store_true')
+parser.add_argument('-xy', '--xy-factor', type=float, default=-1)
+parser.add_argument('-z', '--z-factor', type=float, default=-1)
+parser.add_argument('-ame', '--is-e-amend', action='store_true')
+parser.add_argument('-scl', '--is-e-scale', action='store_true')
+parser.add_argument('-enl', '--is-enlarge-lat', action='store_true')
+parser.add_argument('-sym', '--is-fix-sym', action='store_true')
+parser.add_argument('--is-regular-shape', action='store_true')
+parser.add_argument('-irn', '--init-rlx-steps', type=int, default=_steps)
+parser.add_argument('-gl', '--group-list', nargs='+', type=int, default=0)
+parser.add_argument('-dn', '--decode-num', type=int, default=300)
+
 parser.add_argument('-t', '--timeout', type=int, default=None)
-parser.add_argument('-f', '--filter-struct', type=bool, default=True)
-parser.add_argument('-d', '--dist-min', type=int, default=None)
-parser.add_argument('-w', '--n-wps', type=int, default=100)
 parser.add_argument('--fail-num', type=int, default=1)
 parser.add_argument('--follow-dir', type=str, default=None)
+parser.add_argument('--dir-suffix', type=str, default=None)
+parser.add_argument('--grb-license', type=str, default=None)
+parser.add_argument('--vasp-incar-sin', type=str, default=None)
+parser.add_argument('--vasp-incar-rlx', type=str, action='append', default=['None'])
 args = parser.parse_args()
 
 sys_name = args.system
+dim = args.dim
 
-seeds = args.seeds
-seeds = [None] if seeds is None else seeds
-precs = args.precs
-precs = [None] if precs is None else precs
-
-n_steps = args.n_steps
-# n_steps = 300
-
-init_pos_num = args.init_points
-
-timeout = args.timeout
-# timeout = None
-
-filter_struct = args.filter_struct
-
-dist_min = args.dist_min
-# dist_min = None
-# dist_min = 2
-
-wp_sample_num = args.n_wps
-follow_dir = args.follow_dir
-# follow_dir = None
-fail_num = args.fail_num
-
-"------------components------------"
+emb_type = '+'.join([coords_emb[args.coords_type], sym_emb[args.sym_type], enc_obj[args.enc_obj]])
 
 sol_name = args.solver
 learning_model_type = args.regressor
 e_cal_name = args.evaluator
 
-# sol_name = SolverName.amplify_leap_hybrid()[0]
-# sol_name = SolverName.amplify()[0]
-# sol_name = SolverName.amplify_dwave()[0]
-# sol_name = SolverName.hyperopt_onehot_bayesian_optimization()[0]
-# sol_name = SolverName.hyperopt_bayesian_optimization()[0]
+seed = args.seed
+prec = args.prec
+if len(args.prec) == 1:
+    prec = prec[0]
+if len(prec) == 1:
+    prec = prec[0]
+len_prec = args.latlen_prec
+if len_prec == 0:
+    len_prec = None
+elif len(len_prec) == 1:
+    len_prec = len_prec[0]
+ang_prec = args.latang_prec
+if ang_prec == 0:
+    ang_prec = None
+elif len(ang_prec) == 1:
+    ang_prec = ang_prec[0]
+wpc_prec = args.wpc_prec
+if wpc_prec == 0:
+    wpc_prec = None
 
-# learning_model_type = RegressionName.fm()[0]
-# learning_model_type = RegressionName.sim()[0]
-
-if sol_name in [SolverName.amplify()[0],
-                SolverName.amplify_leap_hybrid()[0],
-                SolverName.amplify_dwave()[0],
-                ]:
-    print('Doing amp')
-    for opt_name in [OptimizerName.onehot()[0]]:
-        for prec in precs:
-            for seed in seeds:
-                ow3 = ModelWrapper(opt_name=opt_name, system_name=sys_name,
-                                   e_cal_name=e_cal_name, sol_name=sol_name,
-                                   learning_model_type=learning_model_type,
-                                   num_steps=n_steps, seed=seed, filter_gen_struct=filter_struct,
-                                   init_pos_num=init_pos_num,
-                                   init_sample_rate=init_sample_rate,
-                                   iter_sample_num=iter_sample_num,
-                                   fail_num=fail_num, wp_sample_num=wp_sample_num,
-                                   precs=prec, dist_min=dist_min, timeout=timeout,
-                                   control_lat_shape=True, control_crys_sys=True, control_spg=True,
-                                   use_constraints=False,
-                                   follow_dir=follow_dir)
-                g1, h1, i1 = ow3.test()
-
-elif sol_name in [SolverName.hyperopt_onehot_bayesian_optimization()[0],
-                  SolverName.hyperopt_onehot_simulated_annealing()[0]]:
-    print('Doing hyper')
-    for opt_name in [OptimizerName.onehot()[0]]:
-        for prec in precs:
-            for seed in seeds:
-                ow3 = ModelWrapper(opt_name=opt_name, system_name=sys_name,
-                                   e_cal_name=e_cal_name, sol_name=sol_name,
-                                   learning_model_type=learning_model_type,
-                                   num_steps=n_steps, seed=seed, filter_gen_struct=filter_struct,
-                                   init_pos_num=init_pos_num,
-                                   init_sample_rate=init_sample_rate,
-                                   iter_sample_num=iter_sample_num,
-                                   precs=prec, wp_sample_num=wp_sample_num, fail_num=fail_num,
-                                   control_lat_shape=True, control_crys_sys=True, control_spg=True,
-                                   follow_dir=follow_dir)
-                g1, h1, i1 = ow3.test()
-
-elif sol_name in [SolverName.hyperopt_bayesian_optimization()[0],
-                  SolverName.hyperopt_simulated_annealing()[0]]:
-    print('Doing pure hyper')
-    for opt_name in [OptimizerName.crystal_params_vector()[0]]:
-        for seed in seeds:
-            ow3 = ModelWrapper(opt_name=opt_name, system_name=sys_name,
-                               e_cal_name=e_cal_name, sol_name=sol_name,
-                               init_pos_num=init_pos_num,
-                               num_steps=n_steps, seed=seed, fail_num=fail_num, follow_dir=None)
-            g1, h1, i1 = ow3.test()
-
-elif sol_name in [f'{SolverName.amplify()[0]}_c',
-                  f'{SolverName.amplify_leap_hybrid()[0]}_c',
-                  f'{SolverName.amplify_dwave()[0]}_c',
-                  ]:
-    sol_name = sol_name[:-2]
-    print('Doing constrained amp')
-    for opt_name in [OptimizerName.onehot()[0]]:
-        for prec in precs:
-            for seed in seeds:
-                ow3 = ModelWrapper(opt_name=opt_name, system_name=sys_name,
-                                   e_cal_name=e_cal_name, sol_name=sol_name,
-                                   learning_model_type=learning_model_type,
-                                   num_steps=n_steps, seed=seed, filter_gen_struct=filter_struct,
-                                   init_pos_num=init_pos_num,
-                                   init_sample_rate=init_sample_rate,
-                                   iter_sample_num=iter_sample_num,
-                                   fail_num=fail_num, wp_sample_num=wp_sample_num,
-                                   precs=prec, dist_min=dist_min, timeout=timeout,
-                                   control_lat_shape=True, control_crys_sys=True, control_spg=True,
-                                   use_constraints=True,
-                                   follow_dir=follow_dir)
-                g1, h1, i1 = ow3.test()
-
-elif sol_name in [OptimizerName.random_search()[0]]:
-    print('Doing random search')
-    for opt_name in [OptimizerName.random_search()[0]]:
-        for seed in seeds:
-            ow3 = ModelWrapper(opt_name=opt_name, system_name=sys_name,
-                               e_cal_name=e_cal_name, init_pos_num=10,
-                               num_steps=n_steps, seed=seed,
-                               filter_gen_struct=False, follow_dir=None)
-            g2, h2, i2 = ow3.test()
-
+if sol_name in qubo_list:
+    use_constraints = True
+    is_var_bit = True
 else:
-    raise NotImplementedError
+    use_constraints = False
+    is_var_bit = False
+# use_constraints = args.constr
+# is_var_bit = args.bit
+mt_lambda = args.mt_lambda
+timeout = args.timeout
+
+init_pos_num = args.init_points
+init_set_type = args.init_dataset
+if init_pos_num is None:
+    if OptimizerName.uniform_gen()[0] in init_set_type:
+        init_pos_num = 50
+    else:
+        init_pos_num = 1000
+iter_sample_num = args.add_points
+n_steps = args.n_steps
+
+is_filter_init_data = args.is_filter_init_data
+is_pre_relax = args.is_pre_relax
+is_2d_scale = args.is_2d_scale
+xy_factor, z_factor = args.xy_factor, args.z_factor
+is_amend_energy = args.is_e_amend
+is_enlarge_lattice = args.is_enlarge_lat
+is_scale_energy = args.is_e_scale
+is_fix_sym = args.is_fix_sym
+decode_num = args.decode_num
+init_rlx_steps = args.init_rlx_steps
+
+is_regular_shape = args.is_regular_shape
+if is_regular_shape:
+    group_list = regular_sg_list(dim=dim)
+else:
+    group_list = args.group_list
+    if isinstance(group_list, int):
+        if group_list == 0:
+            group_list = None
+        else:
+            group_list = [group_list]
+
+follow_dir = args.follow_dir
+fail_num = args.fail_num
+custom_name = args.dir_suffix
+
+incar_rlx_dir = args.vasp_incar_rlx
+incar_rlx_dir.remove('None')
+if len(incar_rlx_dir) == 0:
+    incar_rlx_dir = None
+else:
+    incar_rlx_dir = [INCAR_ROOT + '/' + incar for incar in incar_rlx_dir]
+incar_sin_dir = args.vasp_incar_sin
+grb_lic_file = args.grb_license
+
+
+model = ModelWrapper(embedder_type=emb_type, system_name=sys_name, dim=dim, seed=seed, splits=prec,
+                     len_splits=len_prec, ang_splits=ang_prec, wpc_prec=wpc_prec,
+                     num_steps=n_steps, follow_dir=follow_dir, custom_name=custom_name, init_sample_rate=1, 
+                     init_set_type=init_set_type, iter_sample_num=iter_sample_num, init_pos_num=init_pos_num,
+                     
+                     e_cal_name=e_cal_name, sol_name=sol_name, learning_model_type=learning_model_type,
+                     use_constraints=use_constraints, is_var_bit=is_var_bit, is_pre_relax=is_pre_relax,
+                     is_fix_sym=is_fix_sym, init_rlx_steps=init_rlx_steps,
+                     
+                     is_amend_energy=is_amend_energy, is_enlarge_lattice=is_enlarge_lattice, is_scale_energy=is_scale_energy, 
+                     mt_lambda=mt_lambda, is_2d_scale=is_2d_scale, xy_factor=xy_factor, z_factor=z_factor, include_spg_list=group_list,
+                     is_filter_init_data=is_filter_init_data, timeout=timeout, decode_num=decode_num, fail_num=fail_num,
+                     incar_sin_dir=incar_sin_dir, incar_rlx_dir=incar_rlx_dir, grb_lic_dir=grb_lic_file, lmbda_l=None)
+model.test()
