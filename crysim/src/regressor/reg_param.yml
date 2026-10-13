@@ -1,0 +1,54 @@
+split_rate:
+  small_valid: 0.1
+  small_test: 0.1
+  large_valid: 0.25
+  large_test: 0.25
+
+quadratic_reg_param:
+  learning_model_order: 2
+  interaction_terms: 0
+  k_fm: 32
+  epochs: 1000
+  patience: 100
+  batch_size: 100
+  lr: 1e-4
+  lr_s_name: 'CosineAnnealingLR'
+  warmup_steps: 200
+  weight_decay: 1e-06
+  alpha: 1
+  beta: 0
+  ema_momentum: 1
+  loss_type: 'MSE'
+  y_scaling_method: 'Standardization'
+
+quadratic_reg_param_origi:
+  learning_model_order: 2
+  interaction_terms: 0
+  k_fm: 16
+  epochs: 800
+  patience: None
+  batch_size: 100
+  lr: 0.001
+  lr_s_name: 'MultiStepLR'
+  warmup_steps: 1000
+  weight_decay: 1e-09
+  alpha: 10
+  beta: 1
+  ema_momentum: 1
+  loss_type: 'MAE'
+  y_scaling_method: 'Standardization'
+
+bocs_reg_param:
+  sample_time: 10
+  sigma_noise: 1.0
+  w_var: 1.0
+  lamda_for_l1: 0.0
+  y_standardization: True
+
+bhs_reg_param:
+  sample_time: 10
+  gibbs_itr: 550
+  gibbs_burnin: 50
+  gibbs_thin: 1
+  lamda_for_l1: 0.0
+  y_standardization: True
