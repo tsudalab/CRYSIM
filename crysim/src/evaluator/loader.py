@@ -6,7 +6,6 @@ from crysim.src.evaluator.chgnet import EnergyCHGNet
 from crysim.src.evaluator.orb import EnergyOrb
 from crysim.src.evaluator.mattersim import EnergyMattersim
 from crysim.src.evaluator.uma import EnergyUMAS, EnergyUMAM
-from crysim.src.evaluator.base import EnergyBase
 from crysim.src.evaluator.e_eval import _opt
 
 
