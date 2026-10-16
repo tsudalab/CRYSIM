@@ -83,13 +83,13 @@ class DWaveNealSolver(QuadSolver):
 
 class DWaveNealSolverProxy(SolverProxy):
     def __init__(self, num_var=None, use_constraints=False,
-                 mat_l=None, mat_q=None, lmbda_l=100, lmbda_q=100):
+                 mat_l=None, mat_q=None, lmbda_l=None, lmbda_q=None):
         super().__init__(sol_name=SolverName.simulated_annealing()[0],
                          real_sol_name=SolverName.simulated_annealing()[1],
                          num_var=num_var, use_constraints=use_constraints,
                          mat_l=mat_l, mat_q=mat_q)
-        self.lmbda_l, self.lmbda_q = lmbda_l, lmbda_q
-        return
+        self.lmbda_l = lmbda_l if lmbda_l is not None else 100
+        self.lmbda_q = lmbda_q if lmbda_q is not None else 100
 
     def _load(self):
         dw_sol = DWaveNealSolver(init_const_num_var=self.num_var,

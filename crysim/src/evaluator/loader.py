@@ -26,8 +26,6 @@ def load_energy_evaluator(e_cal_name, dim, opt=_opt, incar_sin_dir=None, incar_r
         e_cal = EnergyUMAS(opt=opt, dim=dim)
     elif e_cal_name == EnergyEvaluatorName.uma_m():
         e_cal = EnergyUMAM(opt=opt, dim=dim)
-    elif e_cal_name == EnergyEvaluatorName.base_simulator():
-        e_cal = EnergyBase(opt=opt, dim=dim)
     else:
         raise NotImplementedError
     print(f"load energy evaluator: {time.process_time() - start_time}")
