@@ -507,11 +507,12 @@ class SPG:
         return
 
     def __call__(self, lattice, sites, species):
-        spg = spglib.get_spacegroup(cell=(lattice, sites, species), symprec=self.symprec)
         try:
+            spg = spglib.get_spacegroup(cell=(lattice, sites, species), symprec=self.symprec)
             space_group_number = int(re.findall(r'\((\d+)\)', spg)[0])
-        except TypeError:
-            space_group_number = 0
+        except Exception:
+            log_printer.info('Fail to decide space group for the current structure')
+            spg, space_group_number = 'P1 (1)', 1
         return spg, space_group_number
 
     @staticmethod
