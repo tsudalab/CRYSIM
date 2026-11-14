@@ -175,7 +175,6 @@ class NNTrainer:
 
         for epoch in range(self.epochs):
             self.model.train()
-            optimizer.zero_grad()
             # tr_loss = 0
             patience_epoch += 1
             for train_data in dl_train:
@@ -183,6 +182,7 @@ class NNTrainer:
                 if len(y) < np.max([int(0.1 * self.batch_size), 5]):
                     continue
                 current_step += 1
+                optimizer.zero_grad(set_to_none=True)
 
                 # with autocast():
                 y_pred = self.model(x)

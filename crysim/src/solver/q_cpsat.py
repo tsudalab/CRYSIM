@@ -46,7 +46,7 @@ class CPSATSolver(QuadSolver):
         for term1, term2 in q.keys():
             var_quad_term = self.model.new_int_var(lb=0, ub=1, name=f'{self.var[term1].name}{self.var[term2].name}')
             self.var_quad.append(var_quad_term)
-            self.model.AddMultiplicationEquality(var_quad_term, [term1, term2])
+            self.model.AddMultiplicationEquality(var_quad_term, [self.var[term1], self.var[term2]])
         log_printer.info("Finish adding quadratic variables")
         bqm = np.array(self.var_quad) @ np.array(list(q.values())) + b
         return bqm
